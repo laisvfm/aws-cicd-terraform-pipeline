@@ -1,0 +1,11 @@
+.git
+.gitignore
+.terraform
+*.tfstate
+*.tfstate.backup
+*.pem
+*.hcl
+*.tf
+Dockerfile
+aws/
+laboratorio-devops/
