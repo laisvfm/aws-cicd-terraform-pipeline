@@ -1,7 +1,4 @@
 *.pem
-awscliv2.zip
-aws/
-laboratorio-devops/
 .DS_Store
 
 # Terraform

@@ -1,0 +1,89 @@
+name: Terraform CI/CD
+
+on:
+  workflow_dispatch: # Allows manual triggering of the workflow
+    inputs:
+      apply:
+        description: 'Run terraform apply?'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+        
+      destroy:
+        description: 'Destroy environment?'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+      plan_destroy:
+        description: 'Plan destroy environment?'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+# id-token: write is required for OIDC authentication with AWS (no stored credentials needed).
+# contents: read is required to read the repository contents.
+permissions: 
+  id-token: write
+  contents: read
+
+jobs:
+  job1:
+    name: Terraform
+    runs-on: ubuntu-latest
+    # All "run" steps below will be executed in the ./infra directory, which contains the Terraform configuration files.
+    defaults:
+      run:
+        working-directory: ./infra
+    steps: 
+      # Downloads the repository code to the GitHub runner.
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      # Optional debug step: decodes the OICS token claims, useful for troubleshooting trust policy issues.
+      - name: Debug OIDC Token
+        run: |
+          IDTOKEN=$(curl -sSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          echo "$IDTOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
+      # Authenticates to AWS using OIDC and assumes the role defined in the workflow variables. 
+      # This allows Terraform to manage AWS resources without storing AWS credentials in GitHub secrets.
+      - name: "Configure AWS Credentials"
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/GitHubInfraRole
+          aws-region: us-east-2
+      # Installs Terraform on the GitHub runner using the official HashiCorp action.
+      - name: HashiCorp - Setup Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+      # Downloads the Terraform providers and sets up the remote (S3) backend for storing the Terraform state file.
+      - name: Terraform Init
+        run: terraform init
+      # Checks the Terraform configuration files for syntax errors and other issues before applying any changes.
+      - name: Terraform Validate
+        run: terraform validate
+      # Creates an execution plan for Terraform, showing what actions will be taken to reach the desired state defined in the configuration files. 
+      # The plan is saved to a file named tfplan for later use.
+      - name: Terraform Plan
+        run: terraform plan -var="admin_ip=${{ secrets.ADMIN_IP }}" -out=tfplan
+      # Applies the Terraform plan, but only when the "apply" input is set to 'true'.
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        if: github.event.inputs.apply == 'true'
+      # Creates a destroy plan for Terraform, but only when the "plan_destroy" input is set to 'true'. 
+      # The plan is saved to a file named tfplandestroy for later use.
+      - name: Plan Destroy
+        run: terraform plan -destroy -var="admin_ip=${{ secrets.ADMIN_IP }}" -out=tfplandestroy
+        if: github.event.inputs.plan_destroy == 'true'
+      # Destroys the Terraform-managed infrastructure, but only when the "destroy" input is set to 'true'.
+      - name: Terraform Destroy
+        run: terraform apply -destroy -auto-approve tfplandestroy
+        if: github.event.inputs.destroy == 'true'

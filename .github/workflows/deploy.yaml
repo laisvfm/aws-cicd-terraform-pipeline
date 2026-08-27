@@ -1,0 +1,72 @@
+name: Pipeline CI/CD
+
+# This workflow will build a Docker image, push it to Amazon ECR, and deploy it to an EC2 instance.
+on:
+  push:
+    branches:
+      - main
+
+# id-token: write is required for OIDC authentication with AWS (no stored credentials needed). 
+# contents: read is required to read the repository contents.
+permissions: 
+  id-token: write
+  contents: read
+
+jobs:
+  job1:
+    name: build_ecr
+    runs-on: ubuntu-latest
+    steps:
+      # Downloads the repository code to the GitHub runner.
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+      # Authenticate to AWS using OIDC and assume the role defined in the workflow variables.
+      - name: "Configure AWS Credentials"
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/GitHubActionsRepoApp
+          aws-region: us-east-2
+
+      # Logs Docker in to Amazon ECR so it can push the image to the repository.
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      # Builds the Docker image from the app directory, tags it, and pushes it to Amazon ECR.
+      - name: Build, Tag, and Push Docker image to Amazon ECR
+        run: |
+          docker build -t my-website:v1.0 ./app
+          docker tag my-website:v1.0 ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/web-app:v1.0
+          docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/web-app:v1.0
+
+  job2:
+    name: deploy_ec2
+    needs: job1 # Only runs if job1 (build_ecr) succeeds.
+    env:
+      INSTANCE_KEY: ${{ secrets.INSTANCE_KEY }}
+      PUBLIC_IP: ${{ secrets.PUBLIC_IP }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy EC2 SSH
+        run: |
+          # Writes the private key from the GitHub secret to a file named key.pem.
+          echo "$INSTANCE_KEY" > key.pem
+          # SSH requires the private key to have restricted permissions, so we set it to read-only for the owner.
+          chmod 400 key.pem
+          # Connects to the EC2 instance via SSH and runs the commands below remotely.
+          ssh -i key.pem -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP << EOF
+            # Logs in to Amazon ECR using the AWS CLI and Docker.
+            aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com
+            # Pulls the Docker image from Amazon ECR.
+            docker pull ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/web-app:v1.0
+            echo "Stopping and removing the old container, if it exists..."
+            docker stop web-app || true
+            echo "Container stopped. Removing..."
+            docker rm web-app || true
+            echo "Container removed. Starting new container..."
+            docker run -d -p 80:80 --name web-app ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-2.amazonaws.com/web-app:v1.0
+            echo "New container started successfully!"
+            docker ps
+          EOF
+          # Removes the local copy of the private key for security reasons.
+          rm key.pem

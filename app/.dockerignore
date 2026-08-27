@@ -1,0 +1,3 @@
+# Excludes files that shouldn't be copied into the image
+Dockerfile
+.dockerignore
