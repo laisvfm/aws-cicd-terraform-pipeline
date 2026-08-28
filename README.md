@@ -89,6 +89,16 @@ To reproduce this project in your own AWS account:
 - **Security Groups vs. hosted CI runners**: restricting SSH to a single static IP (a common local best practice) blocks GitHub-hosted runners entirely, since their IP changes on every run.
 - **S3 native state locking** requires explicit permissions on a *second* object key (the `.tflock` companion file) — easy to miss if you only grant access to the state file itself.
 
+## Acknowledgements & Reflections
+
+My sincere thanks to [Maria Lazara](https://github.com/marialazara/laboratorio-devops), an amazing mentor with a deep understanding of DevOps, whose laboratory provided the foundation for this project. Her practical and accessible approach to teaching allowed me to explore DevOps concepts by actually building and troubleshooting a real-world workflow.
+
+This project was a real roller coaster. It brought moments of great satisfaction, but also plenty of frustration while debugging and fixing unexpected issues. 😅 Every challenge, however, became an opportunity to understand the technologies more deeply and see how the different pieces of a DevOps workflow fit together in practice.
+
+I'm already looking forward to working on similar projects and continuing to deepen my knowledge, especially in AWS, Terraform, Docker, and CI/CD. More than just getting the pipeline to work, this experience taught me how important troubleshooting, patience, and understanding the reasons behind each configuration really are.
+
+It was challenging, sometimes frustrating, and definitely a lot of work — but I'm genuinely proud of completing it and of how much I learned along the way. 🦈
+
 ## License
 
-_Coming soon._
+This project is licensed under the [MIT License](./LICENSE).
