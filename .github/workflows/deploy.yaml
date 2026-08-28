@@ -5,7 +5,9 @@ on:
   push:
     branches:
       - main
-
+    paths:
+      - 'app/**'
+      - '.github/workflows/deploy.yaml'
 # id-token: write is required for OIDC authentication with AWS (no stored credentials needed). 
 # contents: read is required to read the repository contents.
 permissions: 
